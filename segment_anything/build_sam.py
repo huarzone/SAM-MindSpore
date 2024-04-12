@@ -1,10 +1,5 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
-import torch
+import mindspore as ms
+from mindspore import nn, ops
 
 from functools import partial
 
@@ -69,7 +64,7 @@ def _build_sam(
             embed_dim=encoder_embed_dim,
             img_size=image_size,
             mlp_ratio=4,
-            norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+            norm_layer=partial(nn.LayerNorm, epsilon=1e-6),
             num_heads=encoder_num_heads,
             patch_size=vit_patch_size,
             qkv_bias=True,
@@ -99,9 +94,7 @@ def _build_sam(
         pixel_mean=[123.675, 116.28, 103.53],
         pixel_std=[58.395, 57.12, 57.375],
     )
-    sam.eval()
+    sam.set_train(False)
     if checkpoint is not None:
-        with open(checkpoint, "rb") as f:
-            state_dict = torch.load(f)
-        sam.load_state_dict(state_dict)
+        ms.load_checkpoint(checkpoint)
     return sam

@@ -1,12 +1,7 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
 import numpy as np
-import torch
-from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
+import mindspore as ms
+from mindspore import nn, ops, Tensor
+from torchvision.ops.boxes import batched_nms, box_area
 
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -133,7 +128,6 @@ class SamAutomaticMaskGenerator:
         self.min_mask_region_area = min_mask_region_area
         self.output_mode = output_mode
 
-    @torch.no_grad()
     def generate(self, image: np.ndarray) -> List[Dict[str, Any]]:
         """
         Generates masks for the given image.
@@ -210,11 +204,11 @@ class SamAutomaticMaskGenerator:
         if len(crop_boxes) > 1:
             # Prefer masks from smaller crops
             scores = 1 / box_area(data["crop_boxes"])
-            scores = scores.to(data["boxes"].device)
+            scores = scores.to(data["boxes"])
             keep_by_nms = batched_nms(
                 data["boxes"].float(),
                 scores,
-                torch.zeros_like(data["boxes"][:, 0]),  # categories
+                ops.zeros_like(data["boxes"][:, 0]),  # categories
                 iou_threshold=self.crop_nms_thresh,
             )
             data.filter(keep_by_nms)
@@ -251,7 +245,7 @@ class SamAutomaticMaskGenerator:
         keep_by_nms = batched_nms(
             data["boxes"].float(),
             data["iou_preds"],
-            torch.zeros_like(data["boxes"][:, 0]),  # categories
+            ops.zeros_like(data["boxes"][:, 0]),  # categories
             iou_threshold=self.box_nms_thresh,
         )
         data.filter(keep_by_nms)
@@ -259,7 +253,7 @@ class SamAutomaticMaskGenerator:
         # Return to the original image frame
         data["boxes"] = uncrop_boxes_xyxy(data["boxes"], crop_box)
         data["points"] = uncrop_points(data["points"], crop_box)
-        data["crop_boxes"] = torch.tensor([crop_box for _ in range(len(data["rles"]))])
+        data["crop_boxes"] = ms.tensor([crop_box for _ in range(len(data["rles"]))])
 
         return data
 
@@ -274,8 +268,8 @@ class SamAutomaticMaskGenerator:
 
         # Run model on this batch
         transformed_points = self.predictor.transform.apply_coords(points, im_size)
-        in_points = torch.as_tensor(transformed_points, device=self.predictor.device)
-        in_labels = torch.ones(in_points.shape[0], dtype=torch.int, device=in_points.device)
+        in_points = ops.scalar_to_tensor(transformed_points)
+        in_labels = ops.ones(in_points.shape[0], dtype=ms.int)
         masks, iou_preds, _ = self.predictor.predict_torch(
             in_points[:, None, :],
             in_labels[:, None],
@@ -287,7 +281,7 @@ class SamAutomaticMaskGenerator:
         data = MaskData(
             masks=masks.flatten(0, 1),
             iou_preds=iou_preds.flatten(0, 1),
-            points=torch.as_tensor(points.repeat(masks.shape[1], axis=0)),
+            points=ops.scalar_to_tensor(points.repeat(masks.shape[1], axis=0)),
         )
         del masks
 
@@ -310,7 +304,7 @@ class SamAutomaticMaskGenerator:
 
         # Filter boxes that touch crop boundaries
         keep_mask = ~is_box_near_crop_edge(data["boxes"], crop_box, [0, 0, orig_w, orig_h])
-        if not torch.all(keep_mask):
+        if not ops.all(keep_mask):
             data.filter(keep_mask)
 
         # Compress to RLE
@@ -346,18 +340,18 @@ class SamAutomaticMaskGenerator:
             mask, changed = remove_small_regions(mask, min_area, mode="islands")
             unchanged = unchanged and not changed
 
-            new_masks.append(torch.as_tensor(mask).unsqueeze(0))
+            new_masks.append(ops.scalar_to_tensor(mask).unsqueeze(0))
             # Give score=0 to changed masks and score=1 to unchanged masks
             # so NMS will prefer ones that didn't need postprocessing
             scores.append(float(unchanged))
 
         # Recalculate boxes and remove any new duplicates
-        masks = torch.cat(new_masks, dim=0)
+        masks = ops.cat(new_masks, dim=0)
         boxes = batched_mask_to_box(masks)
         keep_by_nms = batched_nms(
             boxes.float(),
-            torch.as_tensor(scores),
-            torch.zeros_like(boxes[:, 0]),  # categories
+            ops.scalar_to_tensor(scores),
+            ops.zeros_like(boxes[:, 0]),  # categories
             iou_threshold=nms_thresh,
         )
 
