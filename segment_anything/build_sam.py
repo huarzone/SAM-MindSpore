@@ -96,5 +96,6 @@ def _build_sam(
     )
     sam.set_train(False)
     if checkpoint is not None:
-        ms.load_checkpoint(checkpoint)
+        state_dict = ms.load_checkpoint(checkpoint)
+        param_not_load, _ = ms.load_param_into_net(sam, state_dict)
     return sam
