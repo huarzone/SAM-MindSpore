@@ -103,7 +103,7 @@ class ImageEncoderViT(nn.Cell):
         for blk in self.blocks:
             x = blk(x)
 
-        x = self.neck(x.permute(0, 3, 1, 2))
+        x = self.neck(x.permute((0, 3, 1, 2)))
 
         return x
 
@@ -225,7 +225,10 @@ class Attention(nn.Cell):
         if self.use_rel_pos:
             attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h, self.rel_pos_w, (H, W), (H, W))
 
-        attn = attn.softmax(dim=-1)
+        # attn = attn.softmax(dim=-1)
+        softmax = ops.Softmax(axis=-1)
+        attn = softmax(attn)
+        
         x = (attn @ v).view(B, self.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = self.proj(x)
 
@@ -252,7 +255,8 @@ def window_partition(x: Tensor, window_size: int) -> Tuple[Tensor, Tuple[int, in
     Hp, Wp = H + pad_h, W + pad_w
 
     x = x.view(B, Hp // window_size, window_size, Wp // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    # windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
+    windows = x.permute(0, 1, 3, 2, 4, 5).view(-1, window_size, window_size, C)
     return windows, (Hp, Wp)
 
 
@@ -274,10 +278,12 @@ def window_unpartition(
     H, W = hw
     B = windows.shape[0] // (Hp * Wp // window_size // window_size)
     x = windows.view(B, Hp // window_size, Wp // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
+    # x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, Hp, Wp, -1)
+    x = x.permute(0, 1, 3, 2, 4, 5).view(B, Hp, Wp, -1)
 
     if Hp > H or Wp > W:
-        x = x[:, :H, :W, :].contiguous()
+        # x = x[:, :H, :W, :].contiguous()
+        x = x[:, :H, :W, :]
     return x
 
 
