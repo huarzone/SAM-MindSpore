@@ -18,7 +18,7 @@ from .utils.amg import (
     coco_encode_rle,
     generate_crop_boxes,
     is_box_near_crop_edge,
-    mask_to_rle_pytorch,
+    mask_to_rle_ms,
     remove_small_regions,
     rle_to_mask,
     uncrop_boxes_xyxy,
@@ -270,7 +270,7 @@ class SamAutomaticMaskGenerator:
         transformed_points = self.predictor.transform.apply_coords(points, im_size)
         in_points = ops.scalar_to_tensor(transformed_points)
         in_labels = ops.ones(in_points.shape[0], dtype=ms.int)
-        masks, iou_preds, _ = self.predictor.predict_torch(
+        masks, iou_preds, _ = self.predictor.predict_tensor(
             in_points[:, None, :],
             in_labels[:, None],
             multimask_output=True,
@@ -309,7 +309,7 @@ class SamAutomaticMaskGenerator:
 
         # Compress to RLE
         data["masks"] = uncrop_masks(data["masks"], crop_box, orig_h, orig_w)
-        data["rles"] = mask_to_rle_pytorch(data["masks"])
+        data["rles"] = mask_to_rle_ms(data["masks"])
         del data["masks"]
 
         return data
@@ -358,8 +358,8 @@ class SamAutomaticMaskGenerator:
         # Only recalculate RLEs for masks that have changed
         for i_mask in keep_by_nms:
             if scores[i_mask] == 0.0:
-                mask_torch = masks[i_mask].unsqueeze(0)
-                mask_data["rles"][i_mask] = mask_to_rle_pytorch(mask_torch)[0]
+                mask_tensor = masks[i_mask].unsqueeze(0)
+                mask_data["rles"][i_mask] = mask_to_rle_ms(mask_tensor)[0]
                 mask_data["boxes"][i_mask] = boxes[i_mask]  # update res directly
         mask_data.filter(keep_by_nms)
 

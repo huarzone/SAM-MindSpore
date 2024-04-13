@@ -111,14 +111,14 @@ class MaskDecoder(nn.Cell):
     ) -> Tuple[Tensor, Tensor]:
         """Predicts masks. See 'construct' for more details."""
         # Concatenate output tokens
-        output_tokens = ops.cat([self.iou_token.weight, self.mask_tokens.weight], axis=0)
-        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        output_tokens = ops.cat([self.iou_token.embedding_table, self.mask_tokens.embedding_table], axis=0)
+        output_tokens = output_tokens.unsqueeze(0).broadcast_to((sparse_prompt_embeddings.shape[0], -1, -1))
         tokens = ops.cat((output_tokens, sparse_prompt_embeddings), axis=1)
 
         # Expand per-image data in batch direction to be per-mask
-        src = ops.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
+        src = ops.repeat_interleave(image_embeddings, tokens.shape[0], axis=0)
         src = src + dense_prompt_embeddings
-        pos_src = ops.repeat_interleave(image_pe, tokens.shape[0], dim=0)
+        pos_src = ops.repeat_interleave(image_pe, tokens.shape[0], axis=0)
         b, c, h, w = src.shape
 
         # Run the transformer
@@ -127,12 +127,12 @@ class MaskDecoder(nn.Cell):
         mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
-        src = src.transpose(1, 2).view(b, c, h, w)
+        src = src.swapaxes(1, 2).view(b, c, h, w)
         upscaled_embedding = self.output_upscaling(src)
         hyper_in_list: List[Tensor] = []
         for i in range(self.num_mask_tokens):
             hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
-        hyper_in = ops.stack(hyper_in_list, dim=1)
+        hyper_in = ops.stack(hyper_in_list, axis=1)
         b, c, h, w = upscaled_embedding.shape
         masks = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
 

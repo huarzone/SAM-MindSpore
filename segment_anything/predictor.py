@@ -49,13 +49,13 @@ class SamPredictor:
 
         # Transform the image to the form expected by the model
         input_image = self.transform.apply_image(image)
-        input_image_torch = ops.scalar_to_tensor(input_image)
-        # input_image_torch = input_image_torch.permute(2,0,1).contiguous()[None, :,:,:]
-        input_image_torch = input_image_torch.permute(2,0,1)[None, :,:,:]
+        input_image_tensor = Tensor(input_image)
+        # input_image_tensor = input_image_tensor.permute(2,0,1).contiguous()[None, :,:,:]
+        input_image_tensor = input_image_tensor.permute(2,0,1)[None, :,:,:]
 
-        self.set_torch_image(input_image_torch, image.shape[:2])
+        self.set_tensor_image(input_image_tensor, image.shape[:2])
 
-    def set_torch_image(
+    def set_tensor_image(
         self,
         transformed_image: Tensor,
         original_image_size: Tuple[int, ...],
@@ -75,7 +75,7 @@ class SamPredictor:
             len(transformed_image.shape) == 4
             and transformed_image.shape[1] == 3
             and max(*transformed_image.shape[2:]) == self.model.image_encoder.img_size
-        ), f"set_torch_image input must be BCHW with long side {self.model.image_encoder.img_size}."
+        ), f"set_tensor_image input must be BCHW with long side {self.model.image_encoder.img_size}."
         self.reset_image()
 
         self.original_size = original_image_size
@@ -129,38 +129,38 @@ class SamPredictor:
             raise RuntimeError("An image must be set with .set_image(...) before mask prediction.")
 
         # Transform input prompts
-        coords_torch, labels_torch, box_torch, mask_input_torch = None, None, None, None
+        coords_tensor, labels_tensor, box_tensor, mask_input_tensor = None, None, None, None
         if point_coords is not None:
             assert (
                 point_labels is not None
             ), "point_labels must be supplied if point_coords is supplied."
             point_coords = self.transform.apply_coords(point_coords, self.original_size)
-            coords_torch = ops.scalar_to_tensor(point_coords, dtype=ms.float)
-            labels_torch = ops.scalar_to_tensor(point_labels, dtype=ms.int)
-            coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
+            coords_tensor = Tensor(point_coords, dtype=ms.float32)
+            labels_tensor = Tensor(point_labels, dtype=ms.int32)
+            coords_tensor, labels_tensor = coords_tensor[None, :, :], labels_tensor[None, :]
         if box is not None:
             box = self.transform.apply_boxes(box, self.original_size)
-            box_torch = ops.scalar_to_tensor(box, dtype=ms.float)
-            box_torch = box_torch[None, :]
+            box_tensor = Tensor(box, dtype=ms.float32)
+            box_tensor = box_tensor[None, :]
         if mask_input is not None:
-            mask_input_torch = ops.scalar_to_tensor(mask_input, dtype=ms.float)
-            mask_input_torch = mask_input_torch[None, :, :, :]
+            mask_input_tensor = Tensor(mask_input, dtype=ms.float32)
+            mask_input_tensor = mask_input_tensor[None, :, :, :]
 
-        masks, iou_predictions, low_res_masks = self.predict_torch(
-            coords_torch,
-            labels_torch,
-            box_torch,
-            mask_input_torch,
+        masks, iou_predictions, low_res_masks = self.predict_tensor(
+            coords_tensor,
+            labels_tensor,
+            box_tensor,
+            mask_input_tensor,
             multimask_output,
             return_logits=return_logits,
         )
 
-        masks_np = masks[0].detach().cpu().numpy()
-        iou_predictions_np = iou_predictions[0].detach().cpu().numpy()
-        low_res_masks_np = low_res_masks[0].detach().cpu().numpy()
+        masks_np = masks[0].numpy()
+        iou_predictions_np = iou_predictions[0].numpy()
+        low_res_masks_np = low_res_masks[0].numpy()
         return masks_np, iou_predictions_np, low_res_masks_np
 
-    def predict_torch(
+    def predict_tensor(
         self,
         point_coords: Optional[Tensor],
         point_labels: Optional[Tensor],

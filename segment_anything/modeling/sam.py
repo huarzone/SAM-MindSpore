@@ -82,7 +82,7 @@ class Sam(nn.Cell):
                 shape BxCxHxW, where H=W=256. Can be passed as mask input
                 to subsequent iterations of prediction.
         """
-        input_images = ops.stack([self.preprocess(x["image"]) for x in batched_input], dim=0)
+        input_images = ops.stack([self.preprocess(x["image"]) for x in batched_input], axis=0)
         image_embeddings = self.image_encoder(input_images)
 
         outputs = []

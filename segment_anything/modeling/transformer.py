@@ -74,8 +74,8 @@ class TwoWayTransformer(nn.Cell):
         """
         # BxCxHxW -> BxHWxC == B x N_image_tokens x C
         bs, c, h, w = image_embedding.shape
-        image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
-        image_pe = image_pe.flatten(2).permute(0, 2, 1)
+        image_embedding = image_embedding.flatten(start_dim=2).permute(0, 2, 1)
+        image_pe = image_pe.flatten(start_dim=2).permute(0, 2, 1)
 
         # Prepare queries
         queries = point_embedding
@@ -202,11 +202,11 @@ class Attention(nn.Cell):
     def _separate_heads(self, x: Tensor, num_heads: int) -> Tensor:
         b, n, c = x.shape
         x = x.reshape(b, n, num_heads, c // num_heads)
-        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+        return x.swapaxes(1, 2)  # B x N_heads x N_tokens x C_per_head
 
     def _recombine_heads(self, x: Tensor) -> Tensor:
         b, n_heads, n_tokens, c_per_head = x.shape
-        x = x.transpose(1, 2)
+        x = x.swapaxes(1, 2)
         return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
 
     def construct(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
@@ -224,7 +224,7 @@ class Attention(nn.Cell):
         _, _, _, c_per_head = q.shape
         attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
-        attn = ops.softmax(attn, dim=-1)
+        attn = ops.softmax(attn, axis=-1)
 
         # Get output
         out = attn @ v
